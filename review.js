@@ -108,7 +108,15 @@ lightbox.addEventListener("click", event => {
   if (event.target === lightbox) lightbox.close();
 });
 
+const bookingEndpoint = "https://victoria-soares-beauty.matheusrodrigo519.chatgpt.site/api/agendar";
 const form = document.querySelector("#agendar form");
+const bookingFields = form.querySelector(".booking-fields");
+const sendButton = form.querySelector('button[type="submit"]');
+const sendLabel = form.querySelector(".booking-button-label");
+const bookingError = form.querySelector(".feedback");
+const receipt = document.querySelector("#agendar .booking-success");
+const receiptWhatsapp = receipt.querySelector(".booking-whatsapp");
+const contactWhatsapp = document.querySelector("#agendar .whatsapp-contact");
 const calendar = form.querySelector(".calgrid");
 const monthLabel = form.querySelector(".calbar strong");
 const previousMonth = form.querySelector('[aria-label="Mês anterior"]');
@@ -117,8 +125,6 @@ const dateLabel = form.querySelector(".selected-date strong");
 const timeField = form.elements.namedItem("time");
 const studioTimePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const effectField = form.elements.namedItem("effect");
-const summary = form.querySelector(".preview-summary");
-const steps = document.querySelectorAll("#agendar .booking-steps li");
 const studioClock = new Intl.DateTimeFormat("sv-SE", {
   timeZone: "America/Sao_Paulo",
   year: "numeric",
@@ -137,22 +143,16 @@ const today = studioClock.format(new Date()).slice(0, 10);
 const month = new Date(today.slice(0, 7) + "-01T12:00:00Z");
 const weekdays = Array.from(calendar.children).slice(0, 7);
 let selectedDate = "";
+let requestId = "";
+let sending = false;
 
 function formattedDate(date) {
   return date.split("-").reverse().join("/");
 }
 
-function showStep(active) {
-  steps.forEach((step, index) => {
-    step.classList.toggle("step-active", index === active);
-    if (index === active) step.setAttribute("aria-current", "step");
-    else step.removeAttribute("aria-current");
-  });
-}
-
-function resetSummary() {
-  summary.hidden = true;
-  showStep(0);
+function resetBooking() {
+  requestId = "";
+  bookingError.textContent = "";
 }
 
 function renderMonth() {
@@ -199,7 +199,7 @@ calendar.addEventListener("click", event => {
   for (const day of calendar.querySelectorAll("[data-day]")) {
     day.setAttribute("aria-pressed", String(day === button));
   }
-  resetSummary();
+  resetBooking();
 });
 
 timeField.addEventListener("input", () => {
@@ -211,29 +211,82 @@ timeField.addEventListener("input", () => {
   } else {
     timeField.value = value;
   }
-  resetSummary();
 });
-form.addEventListener("change", resetSummary);
+form.addEventListener("input", resetBooking);
+form.addEventListener("change", resetBooking);
 for (const link of document.querySelectorAll("[data-select-effect]")) {
   link.addEventListener("click", () => {
+    if (sending || form.hidden) return;
     effectField.value = link.dataset.selectEffect;
-    resetSummary();
+    resetBooking();
   });
 }
 
-form.addEventListener("submit", event => {
+form.addEventListener("submit", async event => {
   event.preventDefault();
-  if (!studioTimePattern.test(timeField.value)) {
-    showStep(0);
-    summary.textContent = "Digite um horário válido, como 14:30.";
-  } else if (!selectedDate || selectedDate + " " + timeField.value <= studioClock.format(new Date())) {
-    showStep(0);
-    summary.textContent = "Escolha uma data e um horário futuros.";
-  } else {
-    showStep(1);
-    summary.textContent = `Exemplo de pedido para ${formattedDate(selectedDate)} às ${timeField.value} · ${effectField.value}.`;
+  if (sending) return;
+  if (!selectedDate) {
+    bookingError.textContent = "Selecione um dia no calendário.";
+    return;
   }
-  summary.hidden = false;
+  if (!studioTimePattern.test(timeField.value)) {
+    bookingError.textContent = "Digite um horário válido, como 14:30.";
+    timeField.focus();
+    return;
+  }
+  if (selectedDate + " " + timeField.value <= studioClock.format(new Date())) {
+    bookingError.textContent = "Escolha uma data e um horário futuros.";
+    return;
+  }
+
+  requestId ||= crypto.randomUUID();
+  const data = { ...Object.fromEntries(new FormData(form)), date: selectedDate, id: requestId };
+  sending = true;
+  bookingFields.disabled = true;
+  sendButton.disabled = true;
+  sendLabel.textContent = "Enviando…";
+  form.setAttribute("aria-busy", "true");
+  bookingError.textContent = "";
+  let whatsapp = null;
+  try {
+    const response = await fetch(bookingEndpoint, {
+      method: "POST",
+      credentials: "omit",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result?.ok) {
+      bookingError.textContent = result?.error || "Não foi possível enviar agora. Tente novamente.";
+      return;
+    }
+    whatsapp = result.whatsappUrl;
+    if (whatsapp) {
+      receiptWhatsapp.href = whatsapp;
+      receiptWhatsapp.hidden = false;
+    }
+    receipt.querySelector(".booking-receipt").textContent = `${formattedDate(data.date)} às ${data.time} · ${data.effect}`;
+    form.hidden = true;
+    receipt.hidden = false;
+    receipt.querySelector("h2").focus();
+  } catch {
+    bookingError.textContent = "Não foi possível enviar agora. Tente novamente.";
+  } finally {
+    sending = false;
+    bookingFields.disabled = false;
+    sendButton.disabled = false;
+    sendLabel.textContent = "Solicitar horário";
+    form.setAttribute("aria-busy", "false");
+  }
+  if (whatsapp) window.location.assign(whatsapp);
 });
 
 renderMonth();
+sendButton.disabled = false;
+fetch(bookingEndpoint, { credentials: "omit" })
+  .then(response => response.ok ? response.json() : null)
+  .then(settings => {
+    if (!settings?.whatsappUrl) return;
+    contactWhatsapp.href = settings.whatsappUrl;
+    contactWhatsapp.hidden = false;
+  }).catch(() => {});
