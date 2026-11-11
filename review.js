@@ -61,6 +61,7 @@ const previousMonth = form.querySelector('[aria-label="Mês anterior"]');
 const nextMonth = form.querySelector('[aria-label="Próximo mês"]');
 const dateLabel = form.querySelector(".selected-date strong");
 const timeField = form.elements.namedItem("time");
+const studioTimePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const effectField = form.elements.namedItem("effect");
 const summary = form.querySelector(".preview-summary");
 const steps = document.querySelectorAll("#agendar .booking-steps li");
@@ -147,6 +148,17 @@ calendar.addEventListener("click", event => {
   resetSummary();
 });
 
+timeField.addEventListener("input", () => {
+  const value = timeField.value.replace(/[^\d:]/g, "");
+  if (/^\d{4}$/.test(value)) {
+    timeField.value = value.slice(0, 2) + ":" + value.slice(2);
+  } else if (/^\d:\d{2}$/.test(value)) {
+    timeField.value = "0" + value;
+  } else {
+    timeField.value = value;
+  }
+  resetSummary();
+});
 form.addEventListener("change", resetSummary);
 for (const link of document.querySelectorAll("[data-select-effect]")) {
   link.addEventListener("click", () => {
@@ -157,7 +169,10 @@ for (const link of document.querySelectorAll("[data-select-effect]")) {
 
 form.addEventListener("submit", event => {
   event.preventDefault();
-  if (!selectedDate || selectedDate + " " + timeField.value <= studioClock.format(new Date())) {
+  if (!studioTimePattern.test(timeField.value)) {
+    showStep(0);
+    summary.textContent = "Digite um horário válido, como 14:30.";
+  } else if (!selectedDate || selectedDate + " " + timeField.value <= studioClock.format(new Date())) {
     showStep(0);
     summary.textContent = "Escolha uma data e um horário futuros.";
   } else {
