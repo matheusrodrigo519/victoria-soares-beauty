@@ -30,28 +30,32 @@ if (slides.length > 1) {
   const playIcon = playButton.querySelector("span");
   const dots = Array.from(controls.querySelectorAll(".hero-dot"));
   const effect = heroPhoto.querySelector(".hero-effect");
-  const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
   let activeIndex = 0;
   let playing = false;
-  let hovered = false;
   let timer;
 
   function showSlide(index) {
+    if (index === activeIndex) return;
+    const previousIndex = activeIndex;
     activeIndex = index;
     slides.forEach((slide, position) => {
-      slide.setAttribute("aria-hidden", String(position !== index));
-      dots[position].setAttribute("aria-pressed", String(position === index));
+      const active = position === index;
+      slide.setAttribute("aria-hidden", String(!active));
+      if (active) slide.dataset.slide = "incoming";
+      else if (position === previousIndex) slide.dataset.slide = "outgoing";
+      else delete slide.dataset.slide;
+      dots[position].setAttribute("aria-pressed", String(active));
     });
     effect.textContent = slides[index].dataset.effect;
+    scheduleSlide();
   }
 
   function scheduleSlide() {
     window.clearTimeout(timer);
-    if (!playing || hovered) return;
+    if (!playing) return;
     timer = window.setTimeout(() => {
       showSlide((activeIndex + 1) % slides.length);
-      scheduleSlide();
-    }, 5000);
+    }, 4000);
   }
 
   function setPlaying(value) {
@@ -63,27 +67,11 @@ if (slides.length > 1) {
     scheduleSlide();
   }
 
-  heroPhoto.addEventListener("pointerenter", event => {
-    if (event.pointerType !== "mouse") return;
-    hovered = true;
-    scheduleSlide();
-  });
-  heroPhoto.addEventListener("pointerleave", () => {
-    hovered = false;
-    scheduleSlide();
-  });
-  heroPhoto.addEventListener("focusin", event => {
-    if (event.target.matches(":focus-visible")) setPlaying(false);
-  });
   playButton.addEventListener("click", () => setPlaying(!playing));
   dots.forEach((dot, index) => {
-    dot.addEventListener("click", () => {
-      showSlide(index);
-      setPlaying(false);
-    });
+    dot.addEventListener("click", () => showSlide(index));
   });
-  preference.addEventListener("change", () => setPlaying(!preference.matches));
-  setPlaying(!preference.matches);
+  setPlaying(true);
   controls.hidden = false;
 }
 
