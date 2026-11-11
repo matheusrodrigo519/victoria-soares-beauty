@@ -21,6 +21,72 @@ themeSwitch.addEventListener("click", () => {
   try { localStorage.setItem(themeKey, theme); } catch {}
 });
 
+const heroPhoto = document.querySelector(".hero-photo");
+const slides = Array.from(heroPhoto.querySelectorAll(".hero-slides img"));
+
+if (slides.length > 1) {
+  const controls = heroPhoto.querySelector(".hero-controls");
+  const playButton = controls.querySelector(".hero-play");
+  const playIcon = playButton.querySelector("span");
+  const dots = Array.from(controls.querySelectorAll(".hero-dot"));
+  const effect = heroPhoto.querySelector(".hero-effect");
+  const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let activeIndex = 0;
+  let playing = false;
+  let hovered = false;
+  let timer;
+
+  function showSlide(index) {
+    activeIndex = index;
+    slides.forEach((slide, position) => {
+      slide.setAttribute("aria-hidden", String(position !== index));
+      dots[position].setAttribute("aria-pressed", String(position === index));
+    });
+    effect.textContent = slides[index].dataset.effect;
+  }
+
+  function scheduleSlide() {
+    window.clearTimeout(timer);
+    if (!playing || hovered) return;
+    timer = window.setTimeout(() => {
+      showSlide((activeIndex + 1) % slides.length);
+      scheduleSlide();
+    }, 5000);
+  }
+
+  function setPlaying(value) {
+    playing = value;
+    const label = playing ? "Pausar carrossel" : "Reproduzir carrossel";
+    playButton.setAttribute("aria-label", label);
+    playButton.title = label;
+    playIcon.textContent = playing ? "Ⅱ" : "▶";
+    scheduleSlide();
+  }
+
+  heroPhoto.addEventListener("pointerenter", event => {
+    if (event.pointerType !== "mouse") return;
+    hovered = true;
+    scheduleSlide();
+  });
+  heroPhoto.addEventListener("pointerleave", () => {
+    hovered = false;
+    scheduleSlide();
+  });
+  heroPhoto.addEventListener("focusin", event => {
+    if (event.target.matches(":focus-visible")) setPlaying(false);
+  });
+  playButton.addEventListener("click", () => setPlaying(!playing));
+  dots.forEach((dot, index) => {
+    dot.addEventListener("click", () => {
+      showSlide(index);
+      setPlaying(false);
+    });
+  });
+  preference.addEventListener("change", () => setPlaying(!preference.matches));
+  setPlaying(!preference.matches);
+  controls.hidden = false;
+}
+
 const filterButtons = document.querySelectorAll("[data-filter]");
 const albums = document.querySelectorAll("[data-album]");
 
